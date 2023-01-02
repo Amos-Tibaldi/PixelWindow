@@ -334,23 +334,17 @@ func CreatePixelWindow(pwg *sync.WaitGroup, ppw *PixelWindow) {
 		D3DCREATE_HARDWARE_VERTEXPROCESSING, // D3DCREATE_SOFTWARE_VERTEXPROCESSING,
 		pp)
 	fmt.Printf("errorg3d %s", errorg3d)
-	var FrontBuffer Surface
-	//var prova = uintptr(unsafe.Pointer(&FrontBuffer))
-	var puntfrontbuffer *Surface = &FrontBuffer
-	puntfrontbuffer, err := p_device.CreateOffscreenPlainSurface(
+	var err error
+	ppw.PFrontBuffer, err = p_device.CreateOffscreenPlainSurface(
 		uint(ppw.Xpixsize),
 		uint(ppw.Ypixsize),
 		22,
 		0, //D3DPOOL_SYSTEMMEM,
 		0, //uintptr(puntfrontbuffer),
 	)
-	fmt.Println(puntfrontbuffer)
 	fmt.Println(err)
 	const D3DBACKBUFFER_TYPE_MONO = 0
-	var BackBuffer Surface
-	var BackBufferPointer *Surface = &BackBuffer
-	BackBufferPointer, err = p_device.GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO)
-	fmt.Println(BackBufferPointer)
+	ppw.PBackBuffer, err = p_device.GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO)
 	fmt.Println(err)
 	ppw.ResizeWindow(ppw.Width, ppw.Height)
 
@@ -402,11 +396,63 @@ func pixwinthread(pwp *PixelWindow) {
 		for pwp.MYBUF.MyPixelBuffer.Size == 0 {
 			pwp.MYBUF.Bufcondvar.Wait()
 		}
-		//pDXW->CopyFrameToFrontBuffer();
+		pwp.CopyFrameToFrontBuffer()
 		//pDXW->PutFrontBufferOntoScreen();
 		pwp.MYBUF.Bufmutex.Unlock()
 		pwp.MYBUF.Bufcondvar.Signal()
 	}
+}
+
+// LOCKED_RECT describes a locked rectangular region.
+type LOCKED_RECT struct {
+	Pitch int32
+	PBits uintptr
+}
+
+// UnlockRect unlocks a rectangle on a surface.
+func (obj *Surface) UnlockRect() Error {
+	ret, _, _ := syscall.Syscall(
+		obj.vtbl.UnlockRect,
+		1,
+		uintptr(unsafe.Pointer(obj)),
+		0,
+		0,
+	)
+	return toErr(ret)
+}
+
+// LockRect locks a rectangle on a surface.
+func (obj *Surface) LockRect(
+	rect *RECT,
+	flags uint32,
+) (lockedRect LOCKED_RECT, err Error) {
+	ret, _, _ := syscall.Syscall6(
+		obj.vtbl.LockRect,
+		4,
+		uintptr(unsafe.Pointer(obj)),
+		uintptr(unsafe.Pointer(&lockedRect)),
+		uintptr(unsafe.Pointer(rect)),
+		uintptr(flags),
+		0,
+		0,
+	)
+	err = toErr(ret)
+	return
+}
+
+func (ppw *PixelWindow) CopyFrameToFrontBuffer() {
+	var err error
+	ppw.TheLockedR, err = ppw.PFrontBuffer.LockRect(nil, 0)
+	fmt.Println(err)
+	var a byte
+	for i := 0; i < ppw.Xpixsize*ppw.Ypixsize*4; i++ {
+		a = *(*uint8)(unsafe.Pointer(uintptr(unsafe.Pointer(ppw.MYBUF.MyPixelBuffer.Pixels[ppw.MYBUF.MyPixelBuffer.Tail])) + uintptr(i)))
+		*(*uint8)(unsafe.Pointer(uintptr(unsafe.Pointer(ppw.TheLockedR.PBits)) + uintptr(i))) = a
+	}
+	ppw.MYBUF.MyPixelBuffer.Tail++
+	ppw.MYBUF.MyPixelBuffer.Tail %= PIXELWINDOW_BUFFER_SIZE
+	ppw.MYBUF.MyPixelBuffer.Size--
+	ppw.PFrontBuffer.UnlockRect()
 }
 
 type RECT struct {
@@ -852,15 +898,18 @@ type MyBuffer struct {
 }
 
 type PixelWindow struct {
-	H          HWND
-	ThePointer uintptr
-	Title      string
-	Xpixsize   int
-	Ypixsize   int
-	VSync      bool
-	Width      int
-	Height     int
-	MYBUF      MyBuffer
+	H            HWND
+	ThePointer   uintptr
+	Title        string
+	Xpixsize     int
+	Ypixsize     int
+	VSync        bool
+	Width        int
+	Height       int
+	MYBUF        MyBuffer
+	TheLockedR   LOCKED_RECT
+	PFrontBuffer *Surface
+	PBackBuffer  *Surface
 }
 
 func (pw *PixelWindow) LDAPIXELWindowDisplayBuffer(
