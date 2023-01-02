@@ -326,16 +326,15 @@ func CreatePixelWindow(pwg *sync.WaitGroup, ppw *PixelWindow) {
 	const D3DADAPTER_DEFAULT = 0
 	const D3DDEVTYPE_HAL = 1
 	const D3DCREATE_HARDWARE_VERTEXPROCESSING = 0x00000040
-	var p_device *Device
 	var errorg3d error = nil
-	p_device, _, errorg3d = g_D3D.CreateDevice(D3DADAPTER_DEFAULT,
+	ppw.P_device, _, errorg3d = g_D3D.CreateDevice(D3DADAPTER_DEFAULT,
 		D3DDEVTYPE_HAL,
 		hWnd,
 		D3DCREATE_HARDWARE_VERTEXPROCESSING, // D3DCREATE_SOFTWARE_VERTEXPROCESSING,
 		pp)
 	fmt.Printf("errorg3d %s", errorg3d)
 	var err error
-	ppw.PFrontBuffer, err = p_device.CreateOffscreenPlainSurface(
+	ppw.PFrontBuffer, err = ppw.P_device.CreateOffscreenPlainSurface(
 		uint(ppw.Xpixsize),
 		uint(ppw.Ypixsize),
 		22,
@@ -344,7 +343,7 @@ func CreatePixelWindow(pwg *sync.WaitGroup, ppw *PixelWindow) {
 	)
 	fmt.Println(err)
 	const D3DBACKBUFFER_TYPE_MONO = 0
-	ppw.PBackBuffer, err = p_device.GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO)
+	ppw.PBackBuffer, err = ppw.P_device.GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO)
 	fmt.Println(err)
 	ppw.ResizeWindow(ppw.Width, ppw.Height)
 
@@ -397,10 +396,146 @@ func pixwinthread(pwp *PixelWindow) {
 			pwp.MYBUF.Bufcondvar.Wait()
 		}
 		pwp.CopyFrameToFrontBuffer()
-		//pDXW->PutFrontBufferOntoScreen();
+		pwp.PutFrontBufferOntoScreen()
 		pwp.MYBUF.Bufmutex.Unlock()
 		pwp.MYBUF.Bufcondvar.Signal()
 	}
+}
+
+type COLOR uint32
+
+// Clear clears one or more surfaces such as a render target, multiple render
+// targets, a stencil buffer, and a depth buffer.
+func (obj *Device) Clear(
+	rects []RECT,
+	flags uint32,
+	color COLOR,
+	z float32,
+	stencil uint32,
+) Error {
+	var rectPtr *RECT
+	if len(rects) > 0 {
+		rectPtr = &rects[0]
+	}
+	ret, _, _ := syscall.Syscall9(
+		obj.vtbl.Clear,
+		7,
+		uintptr(unsafe.Pointer(obj)),
+		uintptr(len(rects)),
+		uintptr(unsafe.Pointer(rectPtr)),
+		uintptr(flags),
+		uintptr(color),
+		uintptr(z),
+		uintptr(stencil),
+		0,
+		0,
+	)
+	return toErr(ret)
+}
+
+// BeginScene begins a scene.
+// Applications must call BeginScene before performing any rendering and must
+// call EndScene when rendering is complete and before calling BeginScene again.
+func (obj *Device) BeginScene() Error {
+	ret, _, _ := syscall.Syscall(
+		obj.vtbl.BeginScene,
+		1,
+		uintptr(unsafe.Pointer(obj)),
+		0,
+		0,
+	)
+	return toErr(ret)
+}
+
+// EndScene ends a scene that was begun by calling BeginScene.
+func (obj *Device) EndScene() (err Error) {
+	ret, _, _ := syscall.Syscall(
+		obj.vtbl.EndScene,
+		1,
+		uintptr(unsafe.Pointer(obj)),
+		0,
+		0,
+	)
+	return toErr(ret)
+}
+
+// Present presents the contents of the next buffer in the sequence of back
+// buffers owned by the device.
+func (obj *Device) Present(
+	sourceRect *RECT,
+	destRect *RECT,
+	destWindowOverride HWND,
+	dirtyRegion *RGNDATA,
+) Error {
+	ret, _, _ := syscall.Syscall6(
+		obj.vtbl.Present,
+		5,
+		uintptr(unsafe.Pointer(obj)),
+		uintptr(unsafe.Pointer(sourceRect)),
+		uintptr(unsafe.Pointer(destRect)),
+		uintptr(destWindowOverride),
+		uintptr(unsafe.Pointer(dirtyRegion)),
+		0,
+	)
+	return toErr(ret)
+}
+
+const NULL = 0
+const D3DCLEAR_TARGET = 0x00000001 /* Clear target surface */
+// RGNDATA contains region data.
+type RGNDATA struct {
+	Rdh    RGNDATAHEADER
+	Buffer [1]byte
+}
+
+// RGNDATAHEADER describes region data.
+type RGNDATAHEADER struct {
+	DwSize   uint32
+	IType    uint32
+	NCount   uint32
+	NRgnSize uint32
+	RcBound  RECT
+}
+
+func (ppw *PixelWindow) PutFrontBufferOntoScreen() {
+	ppw.P_device.Clear(nil, //Number of rectangles to clear, we're clearing everything so set it to 0
+		NULL,            //Pointer to the rectangles to clear, NULL to clear whole display
+		D3DCLEAR_TARGET, //What to clear.  We don't have a Z Buffer or Stencil Buffer
+		0x00000000,      //Colour to clear to (AARRGGBB)
+		1.0,             //Value to clear ZBuffer to, doesn't matter since we don't have one
+	) // 0)               //Stencil clear value, again, we don't have one, this value doesn't matter
+
+	ppw.P_device.BeginScene()
+
+	ppw.P_device.UpdateSurface(ppw.PFrontBuffer, nil, ppw.PBackBuffer, nil)
+
+	ppw.P_device.EndScene()
+
+	ppw.P_device.Present(nil, //Source rectangle to display, NULL for all of it
+		nil,  //Destination rectangle, NULL to fill whole display
+		NULL, //Target window, if NULL uses device window set in CreateDevice
+		nil)  //Dirty Region, set it to NULL
+
+}
+
+// UpdateSurface copies rectangular subsets of pixels from one surface to another.
+func (obj *Device) UpdateSurface(
+	sourceSurface *Surface,
+	sourceRect *RECT,
+	destSurface *Surface,
+	destPoint *POINT,
+) Error {
+	ret, _, _ := syscall.Syscall6(
+		obj.vtbl.UpdateSurface,
+		5,
+		uintptr(unsafe.Pointer(obj)),
+		uintptr(unsafe.Pointer(sourceSurface)),
+		uintptr(unsafe.Pointer(sourceRect)),
+		uintptr(unsafe.Pointer(destSurface)),
+		uintptr(unsafe.Pointer(destPoint)),
+		0,
+	)
+	return toErr(ret)
 }
 
 // LOCKED_RECT describes a locked rectangular region.
@@ -446,7 +581,7 @@ func (ppw *PixelWindow) CopyFrameToFrontBuffer() {
 	fmt.Println(err)
 	var a byte
 	for i := 0; i < ppw.Xpixsize*ppw.Ypixsize*4; i++ {
-		a = *(*uint8)(unsafe.Pointer(uintptr(unsafe.Pointer(ppw.MYBUF.MyPixelBuffer.Pixels[ppw.MYBUF.MyPixelBuffer.Tail])) + uintptr(i)))
+		a = *(*uint8)(unsafe.Pointer(uintptr(unsafe.Pointer(&ppw.MYBUF.MyPixelBuffer.Pixels[ppw.MYBUF.MyPixelBuffer.Tail][0])) + uintptr(i)))
 		*(*uint8)(unsafe.Pointer(uintptr(unsafe.Pointer(ppw.TheLockedR.PBits)) + uintptr(i))) = a
 	}
 	ppw.MYBUF.MyPixelBuffer.Tail++
@@ -910,6 +1045,7 @@ type PixelWindow struct {
 	TheLockedR   LOCKED_RECT
 	PFrontBuffer *Surface
 	PBackBuffer  *Surface
+	P_device     *Device
 }
 
 func (pw *PixelWindow) LDAPIXELWindowDisplayBuffer(
@@ -920,10 +1056,10 @@ func (pw *PixelWindow) LDAPIXELWindowDisplayBuffer(
 }
 
 const PIXELWINDOW_BUFFER_SIZE = 4
-const imgsizebytes = 640 * 480 * 4
+const maximgsizebytes = 1000 * 1000 * 4
 
 type PixelBuffer struct {
-	Pixels [PIXELWINDOW_BUFFER_SIZE * imgsizebytes]*byte
+	Pixels [PIXELWINDOW_BUFFER_SIZE][maximgsizebytes]byte
 	Head   int
 	Tail   int
 	Size   int
@@ -934,7 +1070,9 @@ func (pw *PixelWindow) DisplayBuffer(b *byte) {
 	for pw.MYBUF.MyPixelBuffer.Head >= PIXELWINDOW_BUFFER_SIZE {
 		pw.MYBUF.Bufcondvar.Wait()
 	}
-	pw.MYBUF.MyPixelBuffer.Pixels[pw.MYBUF.MyPixelBuffer.Head] = b
+	for i := 0; i < pw.Height*pw.Width*4; i++ {
+		pw.MYBUF.MyPixelBuffer.Pixels[pw.MYBUF.MyPixelBuffer.Head][i] = *(*byte)(unsafe.Pointer(uintptr(unsafe.Pointer(b)) + uintptr(i)))
+	}
 	pw.MYBUF.MyPixelBuffer.Head++
 	pw.MYBUF.MyPixelBuffer.Head %= PIXELWINDOW_BUFFER_SIZE
 	pw.MYBUF.MyPixelBuffer.Size++
