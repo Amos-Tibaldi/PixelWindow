@@ -1,3 +1,38 @@
+//-----------------------------------------------------------------------
+//
+// This file is part of the PixelWindow Project
+//
+//  by Amos Tibaldi - tibaldi at users.sourceforge.net
+//
+// https://sourceforge.net/projects/pixelwindow/
+//
+// https://github.com/Amos-Tibaldi/PixelWindow
+//
+//
+// COPYRIGHT: http://www.gnu.org/licenses/gpl.html
+//            COPYRIGHT-gpl-3.0.txt
+//
+//     The PixelWindow Project
+//        PixelWindow gives high performance pixel access to DirectX windows
+//     in go and in c++.
+//
+//     Copyright (C) 20223 Amos Tibaldi
+//
+//     This program is free software: you can redistribute it and/or modify
+//     it under the terms of the GNU General Public License as published by
+//     the Free Software Foundation, either version 3 of the License, or
+//     (at your option) any later version.
+//
+//     This program is distributed in the hope that it will be useful,
+//     but WITHOUT ANY WARRANTY; without even the implied warranty of
+//     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//     GNU General Public License for more details.
+//
+//     You should have received a copy of the GNU General Public License
+//     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+//
+//-----------------------------------------------------------------------
+
 package PixelWindowGo
 
 import (
@@ -84,6 +119,8 @@ var procGetMessage = moduser32.NewProc("GetMessageW")
 var procTranslateMessage = moduser32.NewProc("TranslateMessage")
 var procDispatchMessage = moduser32.NewProc("DispatchMessageW")
 var procMoveWindow = moduser32.NewProc("MoveWindow")
+var procGetWindowRect = moduser32.NewProc("GetWindowRect")
+var procGetClientRect = moduser32.NewProc("GetClientRect")
 
 var modgdi32 = syscall.NewLazyDLL("gdi32.dll")
 
@@ -231,13 +268,16 @@ func GetStockObject(fnObject int) HGDIOBJ {
 	return HGDIOBJ(ret)
 }
 
-func CreatePixelWindow(pwg *sync.WaitGroup, mytitle string, xpix int, ypix int, isonsync bool, ppw *PixelWindow) {
+func CreatePixelWindow(pwg *sync.WaitGroup, ppw *PixelWindow) {
 	if pwg == nil {
 		return
 	}
+
+	ppw.MYBUF.Bufcondvar = sync.NewCond(&ppw.MYBUF.Bufmutex)
+
 	hInstance := GetModuleHandle("")
 
-	lpszClassName := syscall.StringToUTF16Ptr("CN" + mytitle)
+	lpszClassName := syscall.StringToUTF16Ptr("CN" + ppw.Title)
 
 	var wcex WNDCLASSEX
 	wcex.Size = uint32(unsafe.Sizeof(wcex))
@@ -255,9 +295,9 @@ func CreatePixelWindow(pwg *sync.WaitGroup, mytitle string, xpix int, ypix int, 
 	RegisterClassEx(&wcex)
 
 	hWnd := CreateWindowEx(
-		0, lpszClassName, syscall.StringToUTF16Ptr(mytitle),
+		0, lpszClassName, syscall.StringToUTF16Ptr(ppw.Title),
 		WS_OVERLAPPEDWINDOW|WS_VISIBLE|WS_SYSMENU|WS_MINIMIZEBOX,
-		0, 0, xpix, ypix, 0, 0, hInstance, nil)
+		0, 0, ppw.Xpixsize, ppw.Ypixsize, 0, 0, hInstance, nil)
 
 	SetWindowLongPtr(hWnd, GWLP_USERDATA, uintptr(unsafe.Pointer(ppw)))
 
@@ -265,8 +305,8 @@ func CreatePixelWindow(pwg *sync.WaitGroup, mytitle string, xpix int, ypix int, 
 	fmt.Println(theerr)
 	var pp PRESENT_PARAMETERS
 	pp.BackBufferCount = 1
-	pp.BackBufferWidth = uint32(xpix)
-	pp.BackBufferHeight = uint32(ypix)
+	pp.BackBufferWidth = uint32(ppw.Xpixsize)
+	pp.BackBufferHeight = uint32(ppw.Ypixsize)
 	pp.MultiSampleType = MULTISAMPLE_NONE
 	pp.MultiSampleQuality = 0
 	pp.SwapEffect = SWAPEFFECT_DISCARD
@@ -276,7 +316,7 @@ func CreatePixelWindow(pwg *sync.WaitGroup, mytitle string, xpix int, ypix int, 
 	pp.FullScreen_RefreshRateInHz = D3DPRESENT_RATE_DEFAULT
 	const D3DPRESENT_INTERVAL_DEFAULT = 0x00000000
 	const D3DPRESENT_INTERVAL_IMMEDIATE = 0x80000000
-	if isonsync {
+	if ppw.VSync {
 		pp.PresentationInterval = D3DPRESENT_INTERVAL_DEFAULT
 	} else {
 		pp.PresentationInterval = D3DPRESENT_INTERVAL_IMMEDIATE
@@ -296,31 +336,85 @@ func CreatePixelWindow(pwg *sync.WaitGroup, mytitle string, xpix int, ypix int, 
 	var FrontBuffer Surface
 	var prova = uintptr(unsafe.Pointer(&FrontBuffer))
 	p_device.CreateOffscreenPlainSurface(
-		uint(xpix),
-		uint(ypix),
+		uint(ppw.Xpixsize),
+		uint(ppw.Ypixsize),
 		22,
 		0, //D3DPOOL_SYSTEMMEM,
 		prova,
 	)
+	const D3DBACKBUFFER_TYPE_MONO = 0
+	var BackBuffer Surface
+	p_device.GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &BackBuffer)
 
-	//ResizeWindow(xpix, ypix)
+	ppw.ResizeWindow(ppw.Width, ppw.Height)
 
 	const SW_SHOW = 5
 	ShowWindow(hWnd, SW_SHOW)
 	UpdateWindow(hWnd)
 
-	//CreateThread(NULL, NULL, (LPTHREAD_START_ROUTINE)&PixelWindow::run, this, NULL, NULL);
-
+	go pixwinthread(ppw)
 	theMessagePump()
 	pwg.Done()
+}
+
+func (pwp *PixelWindow) ResizeWindow(width int, height int) {
+	var rect RECT = RECT{0, 0, 0, 0}
+	pwp.CalculateExactRect(int32(width), int32(height), &rect)
+	MoveWindow(pwp.H,
+		int(rect.Left), int(rect.Top),
+		int(rect.Right)-int(rect.Left),
+		int(rect.Bottom)-int(rect.Top),
+		true)
+}
+
+func pixwinthread(pwp *PixelWindow) {
+	for true {
+		pwp.MYBUF.Bufmutex.Lock()
+		for pwp.MYBUF.MyPixelBuffer.Size == 0 {
+			pwp.MYBUF.Bufcondvar.Wait()
+		}
+		//pDXW->CopyFrameToFrontBuffer();
+		//pDXW->PutFrontBufferOntoScreen();
+		pwp.MYBUF.Bufmutex.Unlock()
+		pwp.MYBUF.Bufcondvar.Signal()
+	}
 }
 
 type RECT struct {
 	Left, Top, Right, Bottom int32
 }
 
-func CalculateExactRect(a int, b int, r RECT) {
+func GetClientRect(hwnd HWND) *RECT {
+	var rect RECT
+	ret, _, _ := procGetClientRect.Call(
+		uintptr(hwnd),
+		uintptr(unsafe.Pointer(&rect)))
 
+	if ret == 0 {
+		panic(fmt.Sprintf("GetClientRect(%d) failed", hwnd))
+	}
+
+	return &rect
+}
+
+func GetWindowRect(hwnd HWND) *RECT {
+	var rect RECT
+	procGetWindowRect.Call(
+		uintptr(hwnd),
+		uintptr(unsafe.Pointer(&rect)))
+
+	return &rect
+}
+
+func (p *PixelWindow) CalculateExactRect(cx int32, cy int32, rect *RECT) {
+	var rcWindow *RECT = GetWindowRect(p.H)
+	var rcClient *RECT = GetClientRect(p.H)
+	cx += (rcWindow.Right - rcWindow.Left) - rcClient.Right
+	cy += (rcWindow.Bottom - rcWindow.Top) - rcClient.Bottom
+	rect.Left = rcWindow.Left
+	rect.Top = rcWindow.Top
+	rect.Right = rect.Left + cx
+	rect.Bottom = rect.Top + cy
 }
 
 type BOOL int
@@ -342,16 +436,6 @@ func MoveWindow(hwnd HWND, x, y, width, height int, repaint bool) bool {
 
 	return ret != 0
 
-}
-
-func (ppw *PixelWindow) ResizeWindow(width, height int) {
-	var rect RECT = RECT{0, 0, 0, 0}
-	CalculateExactRect(width, height, rect)
-	MoveWindow(ppw.H,
-		100, 100,
-		200,
-		200,
-		true)
 }
 
 type POOL uint32
@@ -378,6 +462,22 @@ type surfaceVtbl struct {
 	UnlockRect      uintptr
 	GetDC           uintptr
 	ReleaseDC       uintptr
+}
+
+func (obj *Device) GetBackBuffer(a int, b int, c int, s *Surface) {
+	syscall.Syscall9(
+		obj.vtbl.GetBackBuffer,
+		uintptr(a),
+		uintptr(b),
+		uintptr(c),
+		uintptr(unsafe.Pointer(s)),
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+	)
 }
 
 // CreateOffscreenPlainSurface creates an off-screen surface.
@@ -732,9 +832,22 @@ var (
 
 type LDAPIXELWINDOWHANDLE int64
 
+type MyBuffer struct {
+	MyPixelBuffer PixelBuffer
+	Bufmutex      sync.RWMutex
+	Bufcondvar    *sync.Cond
+}
+
 type PixelWindow struct {
-	H        HWND
-	Apointer int64
+	H          HWND
+	ThePointer uintptr
+	Title      string
+	Xpixsize   int
+	Ypixsize   int
+	VSync      bool
+	Width      int
+	Height     int
+	MYBUF      MyBuffer
 }
 
 func (pw *PixelWindow) LDAPIXELWindowDisplayBuffer(
@@ -747,8 +860,6 @@ func (pw *PixelWindow) LDAPIXELWindowDisplayBuffer(
 const PIXELWINDOW_BUFFER_SIZE = 4
 const imgsizebytes = 640 * 480 * 4
 
-var ThePixelBuffer PixelBuffer
-
 type PixelBuffer struct {
 	Pixels [PIXELWINDOW_BUFFER_SIZE * imgsizebytes]*byte
 	Head   int
@@ -757,11 +868,16 @@ type PixelBuffer struct {
 }
 
 func (pw *PixelWindow) DisplayBuffer(b *byte) {
-	ThePixelBuffer.Pixels[ThePixelBuffer.Head] = b
-
-	ThePixelBuffer.Head++
-	ThePixelBuffer.Head %= PIXELWINDOW_BUFFER_SIZE
-	ThePixelBuffer.Size++
+	pw.MYBUF.Bufmutex.Lock()
+	for pw.MYBUF.MyPixelBuffer.Head >= PIXELWINDOW_BUFFER_SIZE {
+		pw.MYBUF.Bufcondvar.Wait()
+	}
+	pw.MYBUF.MyPixelBuffer.Pixels[pw.MYBUF.MyPixelBuffer.Head] = b
+	pw.MYBUF.MyPixelBuffer.Head++
+	pw.MYBUF.MyPixelBuffer.Head %= PIXELWINDOW_BUFFER_SIZE
+	pw.MYBUF.MyPixelBuffer.Size++
+	pw.MYBUF.Bufmutex.Unlock()
+	pw.MYBUF.Bufcondvar.Signal()
 }
 
 func theMessagePump() int {

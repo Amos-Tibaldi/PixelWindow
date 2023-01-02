@@ -1,3 +1,37 @@
+// -----------------------------------------------------------------------
+//
+// This file is part of the PixelWindow Project
+//
+//	by Amos Tibaldi - tibaldi at users.sourceforge.net
+//
+// https://sourceforge.net/projects/pixelwindow/
+//
+// https://github.com/Amos-Tibaldi/PixelWindow
+//
+// COPYRIGHT: http://www.gnu.org/licenses/gpl.html
+//
+//	       COPYRIGHT-gpl-3.0.txt
+//
+//	The PixelWindow Project
+//	   PixelWindow gives high performance pixel access to DirectX windows
+//	in go and in c++.
+//
+//	Copyright (C) 20223 Amos Tibaldi
+//
+//	This program is free software: you can redistribute it and/or modify
+//	it under the terms of the GNU General Public License as published by
+//	the Free Software Foundation, either version 3 of the License, or
+//	(at your option) any later version.
+//
+//	This program is distributed in the hope that it will be useful,
+//	but WITHOUT ANY WARRANTY; without even the implied warranty of
+//	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//	GNU General Public License for more details.
+//
+//	You should have received a copy of the GNU General Public License
+//	along with this program.  If not, see <http://www.gnu.org/licenses/>.
+//
+// -----------------------------------------------------------------------
 package main
 
 import (
@@ -17,12 +51,15 @@ func main() {
 	var redbuffer [imgsizebytes]byte
 	var greenbuffer [imgsizebytes]byte
 	var bluebuffer [imgsizebytes]byte
-	var names [3]string = [...]string{"RED", "GREEN", "BLUE"}
-	var thewindows [3]PixelWindowGo.PixelWindow = [...]PixelWindowGo.PixelWindow{{0, 0}, {0, 0}, {0, 0}}
+	var thewindows [1]PixelWindowGo.PixelWindow = [...]PixelWindowGo.PixelWindow{
+		{H: 0, ThePointer: 0, Title: "RED", Xpixsize: 640, Ypixsize: 480, VSync: true, Width: 640, Height: 480},
+		//{0, 0, "GREEN", 640, 480, true, 640, 480},
+		//{0, 0, "BLUE", 640, 480, true, 640, 480}
+	}
 	wg := sync.WaitGroup{}
 	wg.Add(3)
-	for i := 0; i < 3; i++ {
-		go PixelWindowGo.CreatePixelWindow(&wg, names[i], 640, 480, true, &thewindows[i])
+	for i := 0; i < 1; i++ {
+		go PixelWindowGo.CreatePixelWindow(&wg, &thewindows[i])
 	}
 
 	var level byte = 100
@@ -80,8 +117,8 @@ func main() {
 		}
 
 		thewindows[0].LDAPIXELWindowDisplayBuffer(&redbuffer[0])
-		thewindows[1].LDAPIXELWindowDisplayBuffer(&greenbuffer[0])
-		thewindows[2].LDAPIXELWindowDisplayBuffer(&bluebuffer[0])
+		//thewindows[1].LDAPIXELWindowDisplayBuffer(&greenbuffer[0])
+		//thewindows[2].LDAPIXELWindowDisplayBuffer(&bluebuffer[0])
 	}
 	wg.Wait()
 }
