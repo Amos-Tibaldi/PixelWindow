@@ -298,7 +298,7 @@ func CreatePixelWindow(pwg *sync.WaitGroup, ppw *PixelWindow) {
 		0, lpszClassName, syscall.StringToUTF16Ptr(ppw.Title),
 		WS_OVERLAPPEDWINDOW|WS_VISIBLE|WS_SYSMENU|WS_MINIMIZEBOX,
 		0, 0, ppw.Xpixsize, ppw.Ypixsize, 0, 0, hInstance, nil)
-
+	ppw.H = hWnd
 	SetWindowLongPtr(hWnd, GWLP_USERDATA, uintptr(unsafe.Pointer(ppw)))
 
 	g_D3D, theerr := Create(D3D_SDK_VERSION)
@@ -327,25 +327,31 @@ func CreatePixelWindow(pwg *sync.WaitGroup, ppw *PixelWindow) {
 	const D3DDEVTYPE_HAL = 1
 	const D3DCREATE_HARDWARE_VERTEXPROCESSING = 0x00000040
 	var p_device *Device
-	p_device, _, _ = g_D3D.CreateDevice(D3DADAPTER_DEFAULT,
+	var errorg3d error = nil
+	p_device, _, errorg3d = g_D3D.CreateDevice(D3DADAPTER_DEFAULT,
 		D3DDEVTYPE_HAL,
 		hWnd,
 		D3DCREATE_HARDWARE_VERTEXPROCESSING, // D3DCREATE_SOFTWARE_VERTEXPROCESSING,
 		pp)
-
+	fmt.Printf("errorg3d %s", errorg3d)
 	var FrontBuffer Surface
-	var prova = uintptr(unsafe.Pointer(&FrontBuffer))
-	p_device.CreateOffscreenPlainSurface(
+	//var prova = uintptr(unsafe.Pointer(&FrontBuffer))
+	var puntfrontbuffer *Surface = &FrontBuffer
+	puntfrontbuffer, err := p_device.CreateOffscreenPlainSurface(
 		uint(ppw.Xpixsize),
 		uint(ppw.Ypixsize),
 		22,
 		0, //D3DPOOL_SYSTEMMEM,
-		prova,
+		0, //uintptr(puntfrontbuffer),
 	)
+	fmt.Println(puntfrontbuffer)
+	fmt.Println(err)
 	const D3DBACKBUFFER_TYPE_MONO = 0
 	var BackBuffer Surface
-	p_device.GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &BackBuffer)
-
+	var BackBufferPointer *Surface = &BackBuffer
+	BackBufferPointer, err = p_device.GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO)
+	fmt.Println(BackBufferPointer)
+	fmt.Println(err)
 	ppw.ResizeWindow(ppw.Width, ppw.Height)
 
 	const SW_SHOW = 5
@@ -355,6 +361,29 @@ func CreatePixelWindow(pwg *sync.WaitGroup, ppw *PixelWindow) {
 	go pixwinthread(ppw)
 	theMessagePump()
 	pwg.Done()
+}
+
+type BACKBUFFER_TYPE uint32
+
+// GetBackBuffer retrieves a back buffer from the device's swap chain.
+// Call Release on the returned surface when finished using it.
+func (obj *Device) GetBackBuffer(
+	swapChain uint,
+	backBuffer uint,
+	typ BACKBUFFER_TYPE,
+) (*Surface, Error) {
+	var surface *Surface
+	ret, _, _ := syscall.Syscall6(
+		obj.vtbl.GetBackBuffer,
+		5,
+		uintptr(unsafe.Pointer(obj)),
+		uintptr(swapChain),
+		uintptr(backBuffer),
+		uintptr(typ),
+		uintptr(unsafe.Pointer(&surface)),
+		0,
+	)
+	return surface, toErr(ret)
 }
 
 func (pwp *PixelWindow) ResizeWindow(width int, height int) {
@@ -462,22 +491,6 @@ type surfaceVtbl struct {
 	UnlockRect      uintptr
 	GetDC           uintptr
 	ReleaseDC       uintptr
-}
-
-func (obj *Device) GetBackBuffer(a int, b int, c int, s *Surface) {
-	syscall.Syscall9(
-		obj.vtbl.GetBackBuffer,
-		uintptr(a),
-		uintptr(b),
-		uintptr(c),
-		uintptr(unsafe.Pointer(s)),
-		0,
-		0,
-		0,
-		0,
-		0,
-		0,
-	)
 }
 
 // CreateOffscreenPlainSurface creates an off-screen surface.

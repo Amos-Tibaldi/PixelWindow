@@ -16,7 +16,7 @@
 //	   PixelWindow gives high performance pixel access to DirectX windows
 //	in go and in c++.
 //
-//	Copyright (C) 20223 Amos Tibaldi
+//	Copyright (C) 2022 Amos Tibaldi
 //
 //	This program is free software: you can redistribute it and/or modify
 //	it under the terms of the GNU General Public License as published by
@@ -51,14 +51,14 @@ func main() {
 	var redbuffer [imgsizebytes]byte
 	var greenbuffer [imgsizebytes]byte
 	var bluebuffer [imgsizebytes]byte
-	var thewindows [1]PixelWindowGo.PixelWindow = [...]PixelWindowGo.PixelWindow{
+	var thewindows [3]PixelWindowGo.PixelWindow = [...]PixelWindowGo.PixelWindow{
 		{H: 0, ThePointer: 0, Title: "RED", Xpixsize: 640, Ypixsize: 480, VSync: true, Width: 640, Height: 480},
-		//{0, 0, "GREEN", 640, 480, true, 640, 480},
-		//{0, 0, "BLUE", 640, 480, true, 640, 480}
+		{H: 0, ThePointer: 0, Title: "GREEN", Xpixsize: 640, Ypixsize: 480, VSync: true, Width: 640, Height: 480},
+		{H: 0, ThePointer: 0, Title: "BLUE", Xpixsize: 640, Ypixsize: 480, VSync: true, Width: 640, Height: 480},
 	}
 	wg := sync.WaitGroup{}
 	wg.Add(3)
-	for i := 0; i < 1; i++ {
+	for i := 0; i < 3; i++ {
 		go PixelWindowGo.CreatePixelWindow(&wg, &thewindows[i])
 	}
 
@@ -117,8 +117,8 @@ func main() {
 		}
 
 		thewindows[0].LDAPIXELWindowDisplayBuffer(&redbuffer[0])
-		//thewindows[1].LDAPIXELWindowDisplayBuffer(&greenbuffer[0])
-		//thewindows[2].LDAPIXELWindowDisplayBuffer(&bluebuffer[0])
+		thewindows[1].LDAPIXELWindowDisplayBuffer(&greenbuffer[0])
+		thewindows[2].LDAPIXELWindowDisplayBuffer(&bluebuffer[0])
 	}
 	wg.Wait()
 }
