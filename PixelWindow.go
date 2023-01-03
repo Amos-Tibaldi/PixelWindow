@@ -16,7 +16,7 @@
 //        PixelWindow gives high performance pixel access to DirectX windows
 //     in go and in c++.
 //
-//     Copyright (C) 20223 Amos Tibaldi
+//     Copyright (C) 2022 Amos Tibaldi
 //
 //     This program is free software: you can redistribute it and/or modify
 //     it under the terms of the GNU General Public License as published by
@@ -570,9 +570,7 @@ func (obj *Surface) LockRect(
 }
 
 func (ppw *PixelWindow) CopyFrameToFrontBuffer() {
-	var err error
-	ppw.TheLockedR, err = ppw.PFrontBuffer.LockRect(nil, 0)
-	fmt.Println(err)
+	ppw.TheLockedR, _ = ppw.PFrontBuffer.LockRect(nil, 0)
 	var a byte
 	for i := 0; i < ppw.Xpixsize*ppw.Ypixsize*4; i++ {
 		a = *(*uint8)(unsafe.Pointer(uintptr(unsafe.Pointer(&ppw.MYBUF.MyPixelBuffer.Pixels[ppw.MYBUF.MyPixelBuffer.Tail][0])) + uintptr(i)))
@@ -1061,7 +1059,7 @@ type PixelBuffer struct {
 
 func (pw *PixelWindow) DisplayBuffer(b *byte) {
 	pw.MYBUF.Bufmutex.Lock()
-	for pw.MYBUF.MyPixelBuffer.Head >= PIXELWINDOW_BUFFER_SIZE {
+	for pw.MYBUF.MyPixelBuffer.Size >= PIXELWINDOW_BUFFER_SIZE {
 		pw.MYBUF.Bufcondvar.Wait()
 	}
 	for i := 0; i < pw.Height*pw.Width*4; i++ {
