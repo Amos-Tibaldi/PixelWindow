@@ -317,8 +317,9 @@ func CreatePixelWindow(ppw *PixelWindow) {
 	} else {
 		pp.PresentationInterval = D3DPRESENT_INTERVAL_IMMEDIATE
 	}
-	pp.BackBufferFormat = 22      //Display format
-	pp.EnableAutoDepthStencil = 0 //No depth/stencil buffer
+	const D3DFMT_X8R8G8B8 = 22
+	pp.BackBufferFormat = D3DFMT_X8R8G8B8 //Display format
+	pp.EnableAutoDepthStencil = 0         //No depth/stencil buffer
 	const D3DADAPTER_DEFAULT = 0
 	const D3DDEVTYPE_HAL = 1
 	const D3DCREATE_HARDWARE_VERTEXPROCESSING = 0x00000040
@@ -330,11 +331,12 @@ func CreatePixelWindow(ppw *PixelWindow) {
 		pp)
 	fmt.Printf("errorg3d %s", errorg3d)
 	var err error
+	const D3DPOOL_SYSTEMMEM = 2
 	ppw.PFrontBuffer, err = ppw.P_device.CreateOffscreenPlainSurface(
 		uint(ppw.Xpixsize),
 		uint(ppw.Ypixsize),
-		22,
-		0, //D3DPOOL_SYSTEMMEM,
+		D3DFMT_X8R8G8B8,
+		D3DPOOL_SYSTEMMEM,
 		0, //uintptr(puntfrontbuffer),
 	)
 	fmt.Println(err)
@@ -492,24 +494,19 @@ type RGNDATAHEADER struct {
 }
 
 func (ppw *PixelWindow) PutFrontBufferOntoScreen() {
-	ppw.P_device.Clear(nil, //Number of rectangles to clear, we're clearing everything so set it to 0
-		NULL,            //Pointer to the rectangles to clear, NULL to clear whole display
+	ppw.P_device.Clear( //Number of rectangles to clear, we're clearing everything so set it to 0
+		nil,             //Pointer to the rectangles to clear, NULL to clear whole display
 		D3DCLEAR_TARGET, //What to clear.  We don't have a Z Buffer or Stencil Buffer
 		0x00000000,      //Colour to clear to (AARRGGBB)
 		1.0,             //Value to clear ZBuffer to, doesn't matter since we don't have one
-	) // 0)               //Stencil clear value, again, we don't have one, this value doesn't matter
-
+		0)               //Stencil clear value, again, we don't have one, this value doesn't matter
 	ppw.P_device.BeginScene()
-
 	ppw.P_device.UpdateSurface(ppw.PFrontBuffer, nil, ppw.PBackBuffer, nil)
-
 	ppw.P_device.EndScene()
-
 	ppw.P_device.Present(nil, //Source rectangle to display, NULL for all of it
 		nil,  //Destination rectangle, NULL to fill whole display
 		NULL, //Target window, if NULL uses device window set in CreateDevice
 		nil)  //Dirty Region, set it to NULL
-
 }
 
 // UpdateSurface copies rectangular subsets of pixels from one surface to another.
@@ -574,7 +571,8 @@ func (ppw *PixelWindow) CopyFrameToFrontBuffer() {
 	var a byte
 	for i := 0; i < ppw.Xpixsize*ppw.Ypixsize*4; i++ {
 		a = *(*uint8)(unsafe.Pointer(uintptr(unsafe.Pointer(&ppw.MYBUF.MyPixelBuffer.Pixels[ppw.MYBUF.MyPixelBuffer.Tail][0])) + uintptr(i)))
-		*(*uint8)(unsafe.Pointer(uintptr(unsafe.Pointer(ppw.TheLockedR.PBits)) + uintptr(i))) = a
+		*(*uint8)(unsafe.Pointer(ppw.TheLockedR.PBits + uintptr(i))) = a
+		a++
 	}
 	ppw.MYBUF.MyPixelBuffer.Tail++
 	ppw.MYBUF.MyPixelBuffer.Tail %= PIXELWINDOW_BUFFER_SIZE
