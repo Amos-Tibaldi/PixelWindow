@@ -268,11 +268,7 @@ func GetStockObject(fnObject int) HGDIOBJ {
 	return HGDIOBJ(ret)
 }
 
-func CreatePixelWindow(pwg *sync.WaitGroup, ppw *PixelWindow) {
-	if pwg == nil {
-		return
-	}
-
+func CreatePixelWindow(ppw *PixelWindow) {
 	ppw.MYBUF.Bufcondvar = sync.NewCond(&ppw.MYBUF.Bufmutex)
 
 	hInstance := GetModuleHandle("")
@@ -352,8 +348,6 @@ func CreatePixelWindow(pwg *sync.WaitGroup, ppw *PixelWindow) {
 	UpdateWindow(hWnd)
 
 	go pixwinthread(ppw)
-	theMessagePump()
-	pwg.Done()
 }
 
 type BACKBUFFER_TYPE uint32
@@ -1080,7 +1074,7 @@ func (pw *PixelWindow) DisplayBuffer(b *byte) {
 	pw.MYBUF.Bufcondvar.Signal()
 }
 
-func theMessagePump() int {
+func TheMessagePump() int {
 	var msg MSG
 	for {
 		if GetMessage(&msg, 0, 0, 0) == 0 {
