@@ -186,9 +186,14 @@ func LoadIcon(instance HINSTANCE, iconName *uint16) HICON {
 }
 
 func UpdateWindow(hwnd HWND) bool {
-	ret, _, _ := procUpdateWindow.Call(
-		uintptr(hwnd))
-	return ret != 0
+	retuw, retuwptr, erroruw := procUpdateWindow.Call(uintptr(hwnd))
+	if retuwptr != 0 {
+
+	}
+	if erroruw != nil {
+		//fmt.Println("prntfuw %d", erroruw)
+	}
+	return retuw != 0
 }
 
 func LoadCursor(instance HINSTANCE, cursorName *uint16) HCURSOR {
@@ -269,87 +274,96 @@ func GetStockObject(fnObject int) HGDIOBJ {
 }
 
 func CreatePixelWindow(ppw *PixelWindow) {
-	ppw.MYBUF.Bufcondvar = sync.NewCond(&ppw.MYBUF.Bufmutex)
+	for ppw.IAmInCreation = true; ppw.IAmInCreation; ppw.IAmInCreation = false {
 
-	hInstance := GetModuleHandle("")
+		ppw.MYBUF.Bufcondvar = sync.NewCond(&ppw.MYBUF.Bufmutex)
 
-	lpszClassName := syscall.StringToUTF16Ptr("CN" + ppw.Title)
+		hInstance := GetModuleHandle("")
 
-	var wcex WNDCLASSEX
-	wcex.Size = uint32(unsafe.Sizeof(wcex))
-	wcex.Style = CS_OWNDC
-	wcex.WndProc = syscall.NewCallback(WndProc)
-	wcex.ClsExtra = 0
-	wcex.WndExtra = 0
-	wcex.Instance = hInstance
-	wcex.Icon = LoadIcon(hInstance, MakeIntResource(IDI_APPLICATION))
-	wcex.Cursor = LoadCursor(0, MakeIntResource(IDC_ARROW))
-	wcex.Background = HBRUSH(GetStockObject(BLACK_BRUSH))
-	wcex.MenuName = nil
-	wcex.ClassName = lpszClassName
-	wcex.IconSm = LoadIcon(hInstance, MakeIntResource(IDI_APPLICATION))
-	RegisterClassEx(&wcex)
+		lpszClassName := syscall.StringToUTF16Ptr("CN" + ppw.Title)
 
-	hWnd := CreateWindowEx(
-		0, lpszClassName, syscall.StringToUTF16Ptr(ppw.Title),
-		WS_OVERLAPPEDWINDOW|WS_VISIBLE|WS_SYSMENU|WS_MINIMIZEBOX,
-		0, 0, ppw.Xpixsize, ppw.Ypixsize, 0, 0, hInstance, nil)
-	ppw.H = hWnd
-	SetWindowLongPtr(hWnd, GWLP_USERDATA, uintptr(unsafe.Pointer(ppw)))
+		ppw.IsRectUsed = false
+		ppw.Rect.Bottom = 0
+		ppw.Rect.Left = 0
+		ppw.Rect.Top = 0
+		ppw.Rect.Right = 0
 
-	g_D3D, theerr := Create(D3D_SDK_VERSION)
-	fmt.Println(theerr)
-	var pp PRESENT_PARAMETERS
-	pp.BackBufferCount = 1
-	pp.BackBufferWidth = uint32(ppw.Xpixsize)
-	pp.BackBufferHeight = uint32(ppw.Ypixsize)
-	pp.MultiSampleType = MULTISAMPLE_NONE
-	pp.MultiSampleQuality = 0
-	pp.SwapEffect = SWAPEFFECT_DISCARD
-	pp.HDeviceWindow = hWnd
-	pp.Windowed = 1
-	pp.Flags = PRESENTFLAG_LOCKABLE_BACKBUFFER
-	pp.FullScreen_RefreshRateInHz = D3DPRESENT_RATE_DEFAULT
-	const D3DPRESENT_INTERVAL_DEFAULT = 0x00000000
-	const D3DPRESENT_INTERVAL_IMMEDIATE = 0x80000000
-	if ppw.VSync {
-		pp.PresentationInterval = D3DPRESENT_INTERVAL_DEFAULT
-	} else {
-		pp.PresentationInterval = D3DPRESENT_INTERVAL_IMMEDIATE
+		var wcex WNDCLASSEX
+		wcex.Size = uint32(unsafe.Sizeof(wcex))
+		wcex.Style = CS_OWNDC
+		wcex.WndProc = syscall.NewCallback(WndProc)
+		wcex.ClsExtra = 0
+		wcex.WndExtra = 0
+		wcex.Instance = hInstance
+		wcex.Icon = LoadIcon(hInstance, MakeIntResource(IDI_APPLICATION))
+		wcex.Cursor = LoadCursor(0, MakeIntResource(IDC_ARROW))
+		wcex.Background = HBRUSH(GetStockObject(BLACK_BRUSH))
+		wcex.MenuName = nil
+		wcex.ClassName = lpszClassName
+		wcex.IconSm = LoadIcon(hInstance, MakeIntResource(IDI_APPLICATION))
+		RegisterClassEx(&wcex)
+
+		hWnd := CreateWindowEx(
+			0, lpszClassName, syscall.StringToUTF16Ptr(ppw.Title),
+			WS_OVERLAPPEDWINDOW|WS_VISIBLE|WS_SYSMENU|WS_MINIMIZEBOX,
+			0, 0, ppw.Xpixsize, ppw.Ypixsize, 0, 0, hInstance, nil)
+		ppw.H = hWnd
+		SetWindowLongPtr(hWnd, GWLP_USERDATA, uintptr(unsafe.Pointer(ppw)))
+
+		g_D3D, theerr := Create(D3D_SDK_VERSION)
+		fmt.Println(theerr)
+		var pp PRESENT_PARAMETERS
+		pp.BackBufferCount = 1
+		pp.BackBufferWidth = uint32(ppw.Xpixsize)
+		pp.BackBufferHeight = uint32(ppw.Ypixsize)
+		pp.MultiSampleType = MULTISAMPLE_NONE
+		pp.MultiSampleQuality = 0
+		pp.SwapEffect = SWAPEFFECT_DISCARD
+		pp.HDeviceWindow = ppw.H
+		pp.Windowed = 1
+		pp.Flags = PRESENTFLAG_LOCKABLE_BACKBUFFER
+		pp.FullScreen_RefreshRateInHz = D3DPRESENT_RATE_DEFAULT
+		const D3DPRESENT_INTERVAL_DEFAULT = 0x00000000
+		const D3DPRESENT_INTERVAL_IMMEDIATE = 0x80000000
+		if ppw.VSync {
+			pp.PresentationInterval = D3DPRESENT_INTERVAL_DEFAULT
+		} else {
+			pp.PresentationInterval = D3DPRESENT_INTERVAL_IMMEDIATE
+		}
+		const D3DFMT_X8R8G8B8 = 22
+		pp.BackBufferFormat = D3DFMT_X8R8G8B8 //Display format
+		pp.EnableAutoDepthStencil = 0         //No depth/stencil buffer
+		const D3DADAPTER_DEFAULT = 0
+		const D3DDEVTYPE_HAL = 1
+		const D3DCREATE_HARDWARE_VERTEXPROCESSING = 0x00000040
+		//var errorg3d error = nil
+		ppw.P_device, _, _ = g_D3D.CreateDevice(D3DADAPTER_DEFAULT,
+			D3DDEVTYPE_HAL,
+			hWnd,
+			D3DCREATE_HARDWARE_VERTEXPROCESSING, // D3DCREATE_SOFTWARE_VERTEXPROCESSING,
+			pp)
+		//fmt.Printf("errorg3d %s", errorg3d)
+		//var err error
+		const D3DPOOL_SYSTEMMEM = 2
+		ppw.PFrontBuffer, _ = ppw.P_device.CreateOffscreenPlainSurface(
+			uint(ppw.Xpixsize),
+			uint(ppw.Ypixsize),
+			D3DFMT_X8R8G8B8,
+			D3DPOOL_SYSTEMMEM,
+			0, //uintptr(puntfrontbuffer),
+		)
+		//fmt.Println(err)
+		const D3DBACKBUFFER_TYPE_MONO = 0
+		ppw.PBackBuffer, _ = ppw.P_device.GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO)
+		//fmt.Println(err)
+		ppw.ResizeWindow(ppw.Width, ppw.Height)
+
+		const SW_SHOW = 5
+		ShowWindow(ppw.H, SW_SHOW)
+		UpdateWindow(ppw.H)
+
+		go pixwinthread(ppw)
 	}
-	const D3DFMT_X8R8G8B8 = 22
-	pp.BackBufferFormat = D3DFMT_X8R8G8B8 //Display format
-	pp.EnableAutoDepthStencil = 0         //No depth/stencil buffer
-	const D3DADAPTER_DEFAULT = 0
-	const D3DDEVTYPE_HAL = 1
-	const D3DCREATE_HARDWARE_VERTEXPROCESSING = 0x00000040
-	var errorg3d error = nil
-	ppw.P_device, _, errorg3d = g_D3D.CreateDevice(D3DADAPTER_DEFAULT,
-		D3DDEVTYPE_HAL,
-		hWnd,
-		D3DCREATE_HARDWARE_VERTEXPROCESSING, // D3DCREATE_SOFTWARE_VERTEXPROCESSING,
-		pp)
-	fmt.Printf("errorg3d %s", errorg3d)
-	var err error
-	const D3DPOOL_SYSTEMMEM = 2
-	ppw.PFrontBuffer, err = ppw.P_device.CreateOffscreenPlainSurface(
-		uint(ppw.Xpixsize),
-		uint(ppw.Ypixsize),
-		D3DFMT_X8R8G8B8,
-		D3DPOOL_SYSTEMMEM,
-		0, //uintptr(puntfrontbuffer),
-	)
-	fmt.Println(err)
-	const D3DBACKBUFFER_TYPE_MONO = 0
-	ppw.PBackBuffer, err = ppw.P_device.GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO)
-	fmt.Println(err)
-	ppw.ResizeWindow(ppw.Width, ppw.Height)
-
-	const SW_SHOW = 5
-	ShowWindow(hWnd, SW_SHOW)
-	UpdateWindow(hWnd)
-
-	go pixwinthread(ppw)
 }
 
 type BACKBUFFER_TYPE uint32
@@ -376,13 +390,15 @@ func (obj *Device) GetBackBuffer(
 }
 
 func (pwp *PixelWindow) ResizeWindow(width int, height int) {
-	var rect RECT = RECT{0, 0, 0, 0}
-	pwp.CalculateExactRect(int32(width), int32(height), &rect)
-	MoveWindow(pwp.H,
-		int(rect.Left), int(rect.Top),
-		int(rect.Right)-int(rect.Left),
-		int(rect.Bottom)-int(rect.Top),
-		true)
+	for ; !pwp.IsRectUsed; pwp.IsRectUsed = true {
+		pwp.CalculateExactRect(int32(width), int32(height), &pwp.Rect)
+		MoveWindow(pwp.H,
+			int(pwp.Rect.Left), int(pwp.Rect.Top),
+			int(pwp.Rect.Right)-int(pwp.Rect.Left),
+			int(pwp.Rect.Bottom)-int(pwp.Rect.Top),
+			true)
+	}
+	pwp.IsRectUsed = false
 }
 
 func pixwinthread(pwp *PixelWindow) {
@@ -1023,19 +1039,22 @@ type MyBuffer struct {
 }
 
 type PixelWindow struct {
-	H            HWND
-	ThePointer   uintptr
-	Title        string
-	Xpixsize     int
-	Ypixsize     int
-	VSync        bool
-	Width        int
-	Height       int
-	MYBUF        MyBuffer
-	TheLockedR   LOCKED_RECT
-	PFrontBuffer *Surface
-	PBackBuffer  *Surface
-	P_device     *Device
+	H             HWND
+	ThePointer    uintptr
+	Title         string
+	Xpixsize      int
+	Ypixsize      int
+	VSync         bool
+	Width         int
+	Height        int
+	MYBUF         MyBuffer
+	TheLockedR    LOCKED_RECT
+	PFrontBuffer  *Surface
+	PBackBuffer   *Surface
+	P_device      *Device
+	Rect          RECT
+	IsRectUsed    bool
+	IAmInCreation bool
 }
 
 func (pw *PixelWindow) LDAPIXELWindowDisplayBuffer(
