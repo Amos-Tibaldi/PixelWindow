@@ -599,7 +599,7 @@ func (ppw *PixelWindow) CopyFrameToFrontBuffer() {
 	//ppw.MYBUF.MyPixelBuffer.Tail++
 	//ppw.MYBUF.MyPixelBuffer.Tail %= PIXELWINDOW_BUFFER_SIZE
 	//ppw.MYBUF.MyPixelBuffer.Size--
-	fmt.Println("fine copy size= d", ppw.MYBUF.MyPixelBuffer.Size)
+	fmt.Println("fine copy size= ", ppw.MYBUF.MyPixelBuffer.Size)
 	ppw.PFrontBuffer.UnlockRect()
 	//if ppw.MYBUF.MyPixelBuffer.Size > 0 {
 	//	ppw.MYBUF.Bufcondvar.Signal()
@@ -1098,6 +1098,7 @@ func (pw *PixelWindow) DisplayBuffer(b *byte) {
 	fmt.Println("dbmutlock sizebeforeunlock ", pw.MYBUF.MyPixelBuffer.Size, pw.H)
 	pw.MYBUF.Bufmutex.Unlock()
 	if pw.MYBUF.MyPixelBuffer.Size > 0 {
+		fmt.Println("prima di signal")
 		pw.MYBUF.Bufcondvar.Signal()
 	}
 }
@@ -1111,11 +1112,11 @@ func TheMessagePump() int {
 			fmt.Println("Getmsgxit retvalZero Hwprm=", retval, msgg.WParam)
 			break
 		} else {
-			fmt.Println("GetmsgxitT retval= H=", retval, msgg.WParam)
+			fmt.Println("GetmsgxitT retval= Hwprm=", retval, msgg.WParam)
 		}
 		TranslateMessage(&msgg)
 		DispatchMessage(&msgg)
-		fmt.Println("Xit  retval= H=", retval, msgg.WParam)
+		fmt.Println("Xit  retval= Hwprm=", retval, msgg.WParam)
 	}
 	return int(msgg.WParam)
 }

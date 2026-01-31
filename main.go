@@ -54,6 +54,8 @@ var thewindows [3]PixelWindowGo.PixelWindow = [...]PixelWindowGo.PixelWindow{
 	{H: 0, ThePointer: 0, Title: "BLUE", Xpixsize: 640, Ypixsize: 480, VSync: true, Width: 640, Height: 480},
 }
 
+var themsgpmpret int = 0
+
 func main() {
 
 	for i := 0; i < 3; i++ {
@@ -63,12 +65,25 @@ func main() {
 	fillBuffersAndUpdatePixels()
 	fmt.Println("spike")
 	for true {
-		if PixelWindowGo.TheMessagePump() == 20 {
-			fillBuffersAndUpdatePixels()
+		themsgpmpret = PixelWindowGo.TheMessagePump()
+		fillBuffersAndUpdatePixels()
+		if themsgpmpret == 20 {
+
 		}
-		if PixelWindowGo.TheMessagePump() == 8 {
-			fillBuffersAndUpdatePixels()
+		if themsgpmpret == 8 {
+
 		}
+		if themsgpmpret == 9 {
+
+		}
+		if themsgpmpret == 0 {
+
+		}
+		if themsgpmpret == 2 {
+			//fillBuffersAndUpdatePixels()
+		}
+
+		fmt.Println("altro valore in uscita ", themsgpmpret)
 		//PixelWindowGo.TheMessagePump()
 	}
 
