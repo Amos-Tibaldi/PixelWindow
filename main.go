@@ -36,85 +36,100 @@ package main
 
 import (
 	"PixelWindowGo/PixelWindowGo"
+	"fmt"
 )
 
-var g_app_done bool
+var bIOwnTheMessagePump bool = false
+var luckyhwnd PixelWindowGo.HWND = 0
+
+const imgsizebytes = 640 * 480 * 4
+
+var redbuffer [imgsizebytes]byte
+var greenbuffer [imgsizebytes]byte
+var bluebuffer [imgsizebytes]byte
+
+var thewindows [3]PixelWindowGo.PixelWindow = [...]PixelWindowGo.PixelWindow{
+	{H: 0, ThePointer: 0, Title: "RED", Xpixsize: 640, Ypixsize: 480, VSync: true, Width: 640, Height: 480},
+	{H: 0, ThePointer: 0, Title: "GREEN", Xpixsize: 640, Ypixsize: 480, VSync: true, Width: 640, Height: 480},
+	{H: 0, ThePointer: 0, Title: "BLUE", Xpixsize: 640, Ypixsize: 480, VSync: true, Width: 640, Height: 480},
+}
 
 func main() {
-	const imgsizebytes = 640 * 480 * 4
-	var redbuffer [imgsizebytes]byte
-	var greenbuffer [imgsizebytes]byte
-	var bluebuffer [imgsizebytes]byte
-	var thewindows [3]PixelWindowGo.PixelWindow = [...]PixelWindowGo.PixelWindow{
-		{H: 0, ThePointer: 0, Title: "RED", Xpixsize: 640, Ypixsize: 480, VSync: true, Width: 640, Height: 480},
-		{H: 0, ThePointer: 0, Title: "GREEN", Xpixsize: 640, Ypixsize: 480, VSync: true, Width: 640, Height: 480},
-		{H: 0, ThePointer: 0, Title: "BLUE", Xpixsize: 640, Ypixsize: 480, VSync: true, Width: 640, Height: 480},
-	}
 
 	for i := 0; i < 3; i++ {
 		PixelWindowGo.CreatePixelWindow(&thewindows[i])
 	}
 
-	go func() {
-		var level byte = 100
-
-		for !g_app_done {
-			for i := 0; i < 640; i++ {
-				for j := 0; j < 480; j++ {
-					var offset int64 = int64(4 * (j*640 + i))
-
-					redbuffer[offset+0] = 0
-					redbuffer[offset+1] = 0
-					redbuffer[offset+2] = level
-					redbuffer[offset+3] = 0
-
-					greenbuffer[offset+0] = 0
-					greenbuffer[offset+1] = level
-					greenbuffer[offset+2] = 0
-					greenbuffer[offset+3] = 0
-
-					bluebuffer[offset+0] = level
-					bluebuffer[offset+1] = 0
-					bluebuffer[offset+2] = 0
-					bluebuffer[offset+2] = 0
-				}
-			}
-			level++
-			level %= 255
-			for i := 0; i < 100; i++ {
-				var offset int64 = int64(4 * (i*640 + i))
-				redbuffer[offset+0] = 255
-				greenbuffer[offset+0] = 255
-				bluebuffer[offset+0] = 255
-				redbuffer[offset+1] = 255
-				greenbuffer[offset+1] = 255
-				bluebuffer[offset+1] = 255
-				redbuffer[offset+2] = 255
-				greenbuffer[offset+2] = 255
-				bluebuffer[offset+2] = 255
-				redbuffer[offset+3] = 255
-				greenbuffer[offset+3] = 255
-				bluebuffer[offset+3] = 255
-				offset = int64(4 * ((480-i-1)*640 + i))
-				redbuffer[offset+0] = 255
-				greenbuffer[offset+0] = 255
-				bluebuffer[offset+0] = 255
-				redbuffer[offset+1] = 255
-				greenbuffer[offset+1] = 255
-				bluebuffer[offset+1] = 255
-				redbuffer[offset+2] = 255
-				greenbuffer[offset+2] = 255
-				bluebuffer[offset+2] = 255
-				redbuffer[offset+3] = 255
-				greenbuffer[offset+3] = 255
-				bluebuffer[offset+3] = 255
-			}
-
-			thewindows[0].LDAPIXELWindowDisplayBuffer(&redbuffer[0])
-			thewindows[1].LDAPIXELWindowDisplayBuffer(&greenbuffer[0])
-			thewindows[2].LDAPIXELWindowDisplayBuffer(&bluebuffer[0])
+	fillBuffersAndUpdatePixels()
+	fmt.Println("spike")
+	for true {
+		if PixelWindowGo.TheMessagePump() == 20 {
+			fillBuffersAndUpdatePixels()
 		}
-	}()
+		if PixelWindowGo.TheMessagePump() == 8 {
+			fillBuffersAndUpdatePixels()
+		}
+		//PixelWindowGo.TheMessagePump()
+	}
 
-	PixelWindowGo.TheMessagePump()
+}
+
+var level byte = 100
+
+func fillBuffersAndUpdatePixels() {
+	for i := 0; i < 640; i++ {
+		for j := 0; j < 480; j++ {
+			var offset int64 = int64(4 * (j*640 + i))
+
+			redbuffer[offset+0] = 0
+			redbuffer[offset+1] = 0
+			redbuffer[offset+2] = level
+			redbuffer[offset+3] = 0
+
+			greenbuffer[offset+0] = 0
+			greenbuffer[offset+1] = level
+			greenbuffer[offset+2] = 0
+			greenbuffer[offset+3] = 0
+
+			bluebuffer[offset+0] = level
+			bluebuffer[offset+1] = 0
+			bluebuffer[offset+2] = 0
+			bluebuffer[offset+2] = 0
+		}
+	}
+	level++
+	level %= 255
+	for i := 0; i < 100; i++ {
+		var offset int64 = int64(4 * (i*640 + i))
+		redbuffer[offset+0] = 255
+		greenbuffer[offset+0] = 255
+		bluebuffer[offset+0] = 255
+		redbuffer[offset+1] = 255
+		greenbuffer[offset+1] = 255
+		bluebuffer[offset+1] = 255
+		redbuffer[offset+2] = 255
+		greenbuffer[offset+2] = 255
+		bluebuffer[offset+2] = 255
+		redbuffer[offset+3] = 255
+		greenbuffer[offset+3] = 255
+		bluebuffer[offset+3] = 255
+		offset = int64(4 * ((480-i-1)*640 + i))
+		redbuffer[offset+0] = 255
+		greenbuffer[offset+0] = 255
+		bluebuffer[offset+0] = 255
+		redbuffer[offset+1] = 255
+		greenbuffer[offset+1] = 255
+		bluebuffer[offset+1] = 255
+		redbuffer[offset+2] = 255
+		greenbuffer[offset+2] = 255
+		bluebuffer[offset+2] = 255
+		redbuffer[offset+3] = 255
+		greenbuffer[offset+3] = 255
+		bluebuffer[offset+3] = 255
+
+	}
+
+	thewindows[0].LDAPIXELWindowDisplayBuffer(&redbuffer[0])
+	thewindows[1].LDAPIXELWindowDisplayBuffer(&greenbuffer[0])
+	thewindows[2].LDAPIXELWindowDisplayBuffer(&bluebuffer[0])
 }

@@ -44,6 +44,7 @@ import (
 	"unsafe"
 )
 
+const SW_SHOW = 5
 const D3D_SDK_VERSION = 32
 const GWLP_USERDATA = -21
 const WS_VISIBLE = 0x10000000
@@ -274,96 +275,92 @@ func GetStockObject(fnObject int) HGDIOBJ {
 }
 
 func CreatePixelWindow(ppw *PixelWindow) {
-	for ppw.IAmInCreation = true; ppw.IAmInCreation; ppw.IAmInCreation = false {
+	ppw.MYBUF.Bufcondvar = sync.NewCond(&ppw.MYBUF.Bufmutex)
 
-		ppw.MYBUF.Bufcondvar = sync.NewCond(&ppw.MYBUF.Bufmutex)
+	hInstance := GetModuleHandle("")
 
-		hInstance := GetModuleHandle("")
+	lpszClassName := syscall.StringToUTF16Ptr("CN" + ppw.Title)
 
-		lpszClassName := syscall.StringToUTF16Ptr("CN" + ppw.Title)
+	ppw.IsRectUsed = false
+	ppw.Rect.Bottom = 0
+	ppw.Rect.Left = 0
+	ppw.Rect.Top = 0
+	ppw.Rect.Right = 0
 
-		ppw.IsRectUsed = false
-		ppw.Rect.Bottom = 0
-		ppw.Rect.Left = 0
-		ppw.Rect.Top = 0
-		ppw.Rect.Right = 0
+	var wcex WNDCLASSEX
+	wcex.Size = uint32(unsafe.Sizeof(wcex))
+	wcex.Style = CS_OWNDC
+	wcex.WndProc = syscall.NewCallback(WndProc)
+	wcex.ClsExtra = 0
+	wcex.WndExtra = 0
+	wcex.Instance = hInstance
+	wcex.Icon = LoadIcon(hInstance, MakeIntResource(IDI_APPLICATION))
+	wcex.Cursor = LoadCursor(0, MakeIntResource(IDC_ARROW))
+	wcex.Background = HBRUSH(GetStockObject(BLACK_BRUSH))
+	wcex.MenuName = nil
+	wcex.ClassName = lpszClassName
+	wcex.IconSm = LoadIcon(hInstance, MakeIntResource(IDI_APPLICATION))
+	RegisterClassEx(&wcex)
 
-		var wcex WNDCLASSEX
-		wcex.Size = uint32(unsafe.Sizeof(wcex))
-		wcex.Style = CS_OWNDC
-		wcex.WndProc = syscall.NewCallback(WndProc)
-		wcex.ClsExtra = 0
-		wcex.WndExtra = 0
-		wcex.Instance = hInstance
-		wcex.Icon = LoadIcon(hInstance, MakeIntResource(IDI_APPLICATION))
-		wcex.Cursor = LoadCursor(0, MakeIntResource(IDC_ARROW))
-		wcex.Background = HBRUSH(GetStockObject(BLACK_BRUSH))
-		wcex.MenuName = nil
-		wcex.ClassName = lpszClassName
-		wcex.IconSm = LoadIcon(hInstance, MakeIntResource(IDI_APPLICATION))
-		RegisterClassEx(&wcex)
+	hWnd := CreateWindowEx(
+		0, lpszClassName, syscall.StringToUTF16Ptr(ppw.Title),
+		WS_OVERLAPPEDWINDOW|WS_VISIBLE|WS_SYSMENU|WS_MINIMIZEBOX,
+		0, 0, ppw.Xpixsize, ppw.Ypixsize, 0, 0, hInstance, nil)
+	ppw.H = hWnd
+	SetWindowLongPtr(hWnd, GWLP_USERDATA, uintptr(unsafe.Pointer(ppw)))
 
-		hWnd := CreateWindowEx(
-			0, lpszClassName, syscall.StringToUTF16Ptr(ppw.Title),
-			WS_OVERLAPPEDWINDOW|WS_VISIBLE|WS_SYSMENU|WS_MINIMIZEBOX,
-			0, 0, ppw.Xpixsize, ppw.Ypixsize, 0, 0, hInstance, nil)
-		ppw.H = hWnd
-		SetWindowLongPtr(hWnd, GWLP_USERDATA, uintptr(unsafe.Pointer(ppw)))
-
-		g_D3D, theerr := Create(D3D_SDK_VERSION)
-		fmt.Println(theerr)
-		var pp PRESENT_PARAMETERS
-		pp.BackBufferCount = 1
-		pp.BackBufferWidth = uint32(ppw.Xpixsize)
-		pp.BackBufferHeight = uint32(ppw.Ypixsize)
-		pp.MultiSampleType = MULTISAMPLE_NONE
-		pp.MultiSampleQuality = 0
-		pp.SwapEffect = SWAPEFFECT_DISCARD
-		pp.HDeviceWindow = ppw.H
-		pp.Windowed = 1
-		pp.Flags = PRESENTFLAG_LOCKABLE_BACKBUFFER
-		pp.FullScreen_RefreshRateInHz = D3DPRESENT_RATE_DEFAULT
-		const D3DPRESENT_INTERVAL_DEFAULT = 0x00000000
-		const D3DPRESENT_INTERVAL_IMMEDIATE = 0x80000000
-		if ppw.VSync {
-			pp.PresentationInterval = D3DPRESENT_INTERVAL_DEFAULT
-		} else {
-			pp.PresentationInterval = D3DPRESENT_INTERVAL_IMMEDIATE
-		}
-		const D3DFMT_X8R8G8B8 = 22
-		pp.BackBufferFormat = D3DFMT_X8R8G8B8 //Display format
-		pp.EnableAutoDepthStencil = 0         //No depth/stencil buffer
-		const D3DADAPTER_DEFAULT = 0
-		const D3DDEVTYPE_HAL = 1
-		const D3DCREATE_HARDWARE_VERTEXPROCESSING = 0x00000040
-		//var errorg3d error = nil
-		ppw.P_device, _, _ = g_D3D.CreateDevice(D3DADAPTER_DEFAULT,
-			D3DDEVTYPE_HAL,
-			hWnd,
-			D3DCREATE_HARDWARE_VERTEXPROCESSING, // D3DCREATE_SOFTWARE_VERTEXPROCESSING,
-			pp)
-		//fmt.Printf("errorg3d %s", errorg3d)
-		//var err error
-		const D3DPOOL_SYSTEMMEM = 2
-		ppw.PFrontBuffer, _ = ppw.P_device.CreateOffscreenPlainSurface(
-			uint(ppw.Xpixsize),
-			uint(ppw.Ypixsize),
-			D3DFMT_X8R8G8B8,
-			D3DPOOL_SYSTEMMEM,
-			0, //uintptr(puntfrontbuffer),
-		)
-		//fmt.Println(err)
-		const D3DBACKBUFFER_TYPE_MONO = 0
-		ppw.PBackBuffer, _ = ppw.P_device.GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO)
-		//fmt.Println(err)
-		ppw.ResizeWindow(ppw.Width, ppw.Height)
-
-		const SW_SHOW = 5
-		ShowWindow(ppw.H, SW_SHOW)
-		UpdateWindow(ppw.H)
-
-		go pixwinthread(ppw)
+	g_D3D, theerr := Create(D3D_SDK_VERSION)
+	fmt.Sprintln("graphics %d", theerr)
+	var pp PRESENT_PARAMETERS
+	pp.BackBufferCount = 1
+	pp.BackBufferWidth = uint32(ppw.Xpixsize)
+	pp.BackBufferHeight = uint32(ppw.Ypixsize)
+	pp.MultiSampleType = MULTISAMPLE_NONE
+	pp.MultiSampleQuality = 0
+	pp.SwapEffect = SWAPEFFECT_DISCARD
+	pp.HDeviceWindow = ppw.H
+	pp.Windowed = 1
+	pp.Flags = PRESENTFLAG_LOCKABLE_BACKBUFFER
+	pp.FullScreen_RefreshRateInHz = D3DPRESENT_RATE_DEFAULT
+	const D3DPRESENT_INTERVAL_DEFAULT = 0x00000000
+	const D3DPRESENT_INTERVAL_IMMEDIATE = 0x80000000
+	if ppw.VSync {
+		pp.PresentationInterval = D3DPRESENT_INTERVAL_DEFAULT
+	} else {
+		pp.PresentationInterval = D3DPRESENT_INTERVAL_IMMEDIATE
 	}
+	const D3DFMT_X8R8G8B8 = 22
+	pp.BackBufferFormat = D3DFMT_X8R8G8B8 //Display format
+	pp.EnableAutoDepthStencil = 0         //No depth/stencil buffer
+	const D3DADAPTER_DEFAULT = 0
+	const D3DDEVTYPE_HAL = 1
+	const D3DCREATE_HARDWARE_VERTEXPROCESSING = 0x00000040
+	//var errorg3d error = nil
+	ppw.P_device, _, _ = g_D3D.CreateDevice(D3DADAPTER_DEFAULT,
+		D3DDEVTYPE_HAL,
+		hWnd,
+		D3DCREATE_HARDWARE_VERTEXPROCESSING, // D3DCREATE_SOFTWARE_VERTEXPROCESSING,
+		pp)
+	//fmt.Printf("errorg3d %s", errorg3d)
+	//var err error
+	const D3DPOOL_SYSTEMMEM = 2
+	ppw.PFrontBuffer, _ = ppw.P_device.CreateOffscreenPlainSurface(
+		uint(ppw.Xpixsize),
+		uint(ppw.Ypixsize),
+		D3DFMT_X8R8G8B8,
+		D3DPOOL_SYSTEMMEM,
+		0, //uintptr(puntfrontbuffer),
+	)
+	//fmt.Println(err)
+	const D3DBACKBUFFER_TYPE_MONO = 0
+	ppw.PBackBuffer, _ = ppw.P_device.GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO)
+	//fmt.Println(err)
+	ppw.ResizeWindow(ppw.Width, ppw.Height)
+
+	ShowWindow(ppw.H, SW_SHOW)
+	UpdateWindow(ppw.H)
+
+	go pixwinthread(ppw)
 }
 
 type BACKBUFFER_TYPE uint32
@@ -391,7 +388,7 @@ func (obj *Device) GetBackBuffer(
 
 func (pwp *PixelWindow) ResizeWindow(width int, height int) {
 	for ; !pwp.IsRectUsed; pwp.IsRectUsed = true {
-		fmt.Printf("in Resizewindow %d \n", pwp.H)
+		fmt.Sprintf("in Resizewindow %d \n", pwp.H)
 		pwp.CalculateExactRect(int32(width), int32(height), &pwp.Rect)
 		MoveWindow(pwp.H,
 			int(pwp.Rect.Left), int(pwp.Rect.Top),
@@ -406,12 +403,20 @@ func pixwinthread(pwp *PixelWindow) {
 	for true {
 		pwp.MYBUF.Bufmutex.Lock()
 		for pwp.MYBUF.MyPixelBuffer.Size == 0 {
+			fmt.Println("thrinnerH sizeis ", pwp.H, pwp.MYBUF.MyPixelBuffer.Size)
 			pwp.MYBUF.Bufcondvar.Wait()
+			fmt.Println("exit pixwinthread condwait size", pwp.H, pwp.MYBUF.MyPixelBuffer.Size)
 		}
 		pwp.CopyFrameToFrontBuffer()
 		pwp.PutFrontBufferOntoScreen()
 		pwp.MYBUF.Bufmutex.Unlock()
-		pwp.MYBUF.Bufcondvar.Signal()
+		if pwp.MYBUF.MyPixelBuffer.Size > 0 {
+			pwp.MYBUF.MyPixelBuffer.Size--
+		}
+		fmt.Println("HHH  Size ", pwp.H, pwp.MYBUF.MyPixelBuffer.Size)
+		if pwp.MYBUF.MyPixelBuffer.Size > 0 {
+			pwp.MYBUF.Bufcondvar.Signal()
+		}
 	}
 }
 
@@ -591,10 +596,14 @@ func (ppw *PixelWindow) CopyFrameToFrontBuffer() {
 		*(*uint8)(unsafe.Pointer(ppw.TheLockedR.PBits + uintptr(i))) = a
 		a++
 	}
-	ppw.MYBUF.MyPixelBuffer.Tail++
-	ppw.MYBUF.MyPixelBuffer.Tail %= PIXELWINDOW_BUFFER_SIZE
-	ppw.MYBUF.MyPixelBuffer.Size--
+	//ppw.MYBUF.MyPixelBuffer.Tail++
+	//ppw.MYBUF.MyPixelBuffer.Tail %= PIXELWINDOW_BUFFER_SIZE
+	//ppw.MYBUF.MyPixelBuffer.Size--
+	fmt.Println("fine copy size= d", ppw.MYBUF.MyPixelBuffer.Size)
 	ppw.PFrontBuffer.UnlockRect()
+	//if ppw.MYBUF.MyPixelBuffer.Size > 0 {
+	//	ppw.MYBUF.Bufcondvar.Signal()
+	//}
 }
 
 type RECT struct {
@@ -1040,33 +1049,29 @@ type MyBuffer struct {
 }
 
 type PixelWindow struct {
-	H             HWND
-	ThePointer    uintptr
-	Title         string
-	Xpixsize      int
-	Ypixsize      int
-	VSync         bool
-	Width         int
-	Height        int
-	MYBUF         MyBuffer
-	TheLockedR    LOCKED_RECT
-	PFrontBuffer  *Surface
-	PBackBuffer   *Surface
-	P_device      *Device
-	Rect          RECT
-	IsRectUsed    bool
-	IAmInCreation bool
+	H            HWND
+	ThePointer   uintptr
+	Title        string
+	Xpixsize     int
+	Ypixsize     int
+	VSync        bool
+	Width        int
+	Height       int
+	MYBUF        MyBuffer
+	TheLockedR   LOCKED_RECT
+	PFrontBuffer *Surface
+	PBackBuffer  *Surface
+	P_device     *Device
+	Rect         RECT
+	IsRectUsed   bool
 }
 
-func (pw *PixelWindow) LDAPIXELWindowDisplayBuffer(
-	//win LDAPIXELWINDOWHANDLE,
-	bfr *byte) {
-	//pw.Apointer = int64(win)
+func (pw *PixelWindow) LDAPIXELWindowDisplayBuffer(bfr *byte) {
 	pw.DisplayBuffer(bfr)
 }
 
 const PIXELWINDOW_BUFFER_SIZE = 4
-const maximgsizebytes = 1000 * 1000 * 4
+const maximgsizebytes = 640 * 480 * 4
 
 type PixelBuffer struct {
 	Pixels [PIXELWINDOW_BUFFER_SIZE][maximgsizebytes]byte
@@ -1077,27 +1082,40 @@ type PixelBuffer struct {
 
 func (pw *PixelWindow) DisplayBuffer(b *byte) {
 	pw.MYBUF.Bufmutex.Lock()
-	for pw.MYBUF.MyPixelBuffer.Size >= PIXELWINDOW_BUFFER_SIZE {
+	fmt.Println("dbmutlock ", pw.Height, pw.Width, pw.MYBUF.MyPixelBuffer.Head)
+	for pw.MYBUF.MyPixelBuffer.Size == PIXELWINDOW_BUFFER_SIZE {
+		fmt.Println("dbmutlock size %d", pw.MYBUF.MyPixelBuffer.Size)
 		pw.MYBUF.Bufcondvar.Wait()
 	}
 	for i := 0; i < pw.Height*pw.Width*4; i++ {
-		pw.MYBUF.MyPixelBuffer.Pixels[pw.MYBUF.MyPixelBuffer.Head][i] = *(*byte)(unsafe.Pointer(uintptr(unsafe.Pointer(b)) + uintptr(i)))
+		pw.MYBUF.MyPixelBuffer.Pixels[pw.MYBUF.MyPixelBuffer.Head][i] =
+			*(*byte)(unsafe.Pointer(
+				uintptr(unsafe.Pointer(b)) + uintptr(i)))
 	}
 	pw.MYBUF.MyPixelBuffer.Head++
 	pw.MYBUF.MyPixelBuffer.Head %= PIXELWINDOW_BUFFER_SIZE
 	pw.MYBUF.MyPixelBuffer.Size++
+	fmt.Println("dbmutlock sizebeforeunlock ", pw.MYBUF.MyPixelBuffer.Size, pw.H)
 	pw.MYBUF.Bufmutex.Unlock()
-	pw.MYBUF.Bufcondvar.Signal()
+	if pw.MYBUF.MyPixelBuffer.Size > 0 {
+		pw.MYBUF.Bufcondvar.Signal()
+	}
 }
 
 func TheMessagePump() int {
-	var msg MSG
-	for {
-		if GetMessage(&msg, 0, 0, 0) == 0 {
+	var msgg MSG
+	for true {
+		var retval = GetMessage(&msgg, 0, 0, 0)
+		fmt.Println("Getmsg retval MSG", retval, msgg)
+		if retval == 0 {
+			fmt.Println("Getmsgxit retvalZero Hwprm=", retval, msgg.WParam)
 			break
+		} else {
+			fmt.Println("GetmsgxitT retval= H=", retval, msgg.WParam)
 		}
-		TranslateMessage(&msg)
-		DispatchMessage(&msg)
+		TranslateMessage(&msgg)
+		DispatchMessage(&msgg)
+		fmt.Println("Xit  retval= H=", retval, msgg.WParam)
 	}
-	return int(msg.WParam)
+	return int(msgg.WParam)
 }
