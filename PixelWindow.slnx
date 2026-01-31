@@ -1,0 +1,7 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="PixelWindow.vcxproj" Id="aeca63a1-ede4-479c-8b8b-ba63e48300f9" />
+</Solution>

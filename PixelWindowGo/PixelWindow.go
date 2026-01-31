@@ -391,6 +391,7 @@ func (obj *Device) GetBackBuffer(
 
 func (pwp *PixelWindow) ResizeWindow(width int, height int) {
 	for ; !pwp.IsRectUsed; pwp.IsRectUsed = true {
+		fmt.Printf("in Resizewindow %d \n", pwp.H)
 		pwp.CalculateExactRect(int32(width), int32(height), &pwp.Rect)
 		MoveWindow(pwp.H,
 			int(pwp.Rect.Left), int(pwp.Rect.Top),
