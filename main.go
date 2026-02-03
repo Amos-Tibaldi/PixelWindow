@@ -36,7 +36,6 @@ package main
 
 import (
 	"PixelWindowGo/PixelWindowGo"
-	"fmt"
 )
 
 var bIOwnTheMessagePump bool = false
@@ -54,43 +53,28 @@ var thewindows [3]PixelWindowGo.PixelWindow = [...]PixelWindowGo.PixelWindow{
 	{H: 0, ThePointer: 0, Title: "BLUE", Xpixsize: 640, Ypixsize: 480, VSync: true, Width: 640, Height: 480},
 }
 
-var themsgpmpret int = 0
-
 func main() {
 
 	for i := 0; i < 3; i++ {
-		//PixelWindowGo.CreatePixelWindow(&thewindows[i])
+		PixelWindowGo.CreatePixelWindow(&thewindows[i])
 	}
-	PixelWindowGo.CreatePixelWindow(&thewindows[0])
 
-	fillBuffersAndUpdatePixels()
-	fmt.Println("spike")
+	PixelWindowGo.TheMessagePump(true)
+	go func() {
+		for true {
+			fillBuffersAndUpdatePixels()
+		}
+	}()
+
+	go func() {
+		for true {
+			PixelWindowGo.TheMessagePump(true)
+		}
+	}()
+
 	for true {
-		themsgpmpret = PixelWindowGo.TheMessagePump()
-		fmt.Println("in MAIN")
-		fillBuffersAndUpdatePixels()
-		fmt.Println("in main dopo fillbuffer")
-		if themsgpmpret == 20 {
 
-		}
-		if themsgpmpret == 8 {
-
-		}
-		if themsgpmpret == 9 {
-
-		}
-		//if themsgpmpret == 0 {
-		fillBuffersAndUpdatePixels()
-		//PixelWindowGo.TheMessagePump()
-		//}
-		if themsgpmpret == 2 {
-
-		}
-
-		fmt.Println("altro valore in uscita ", themsgpmpret)
-		//
 	}
-
 }
 
 var level byte = 100
@@ -149,6 +133,6 @@ func fillBuffersAndUpdatePixels() {
 	}
 
 	thewindows[0].LDAPIXELWindowDisplayBuffer(&redbuffer[0])
-	//thewindows[1].LDAPIXELWindowDisplayBuffer(&greenbuffer[0])
-	//thewindows[2].LDAPIXELWindowDisplayBuffer(&bluebuffer[0])
+	thewindows[1].LDAPIXELWindowDisplayBuffer(&greenbuffer[0])
+	thewindows[2].LDAPIXELWindowDisplayBuffer(&bluebuffer[0])
 }

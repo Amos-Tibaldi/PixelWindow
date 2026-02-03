@@ -401,25 +401,25 @@ func (pwp *PixelWindow) ResizeWindow(width int, height int) {
 
 func pixwinthread(pwp *PixelWindow) {
 	for true {
-		fmt.Println("PWT start pixwinthread before lock size", pwp.MYBUF.MyPixelBuffer.Size)
+		//fmt.Println("PWT start pixwinthread before lock size", pwp.MYBUF.MyPixelBuffer.Size)
 		pwp.MYBUF.Bufmutex.Lock()
-		fmt.Println("PWT start pixwinthread after lock")
+		//fmt.Println("PWT start pixwinthread after lock")
 		for pwp.MYBUF.MyPixelBuffer.Size == 0 {
-			fmt.Println("PWT thrinnerH sizeis ", pwp.H, pwp.MYBUF.MyPixelBuffer.Size)
+			//fmt.Println("PWT thrinnerH sizeis ", pwp.H, pwp.MYBUF.MyPixelBuffer.Size)
 			pwp.MYBUF.Bufcondvar.Wait()
-			fmt.Println("PWT exit pixwinthread condwait size", pwp.H, pwp.MYBUF.MyPixelBuffer.Size)
+			//fmt.Println("PWT exit pixwinthread condwait size", pwp.H, pwp.MYBUF.MyPixelBuffer.Size)
 		}
 		pwp.CopyFrameToFrontBuffer()
 		pwp.MYBUF.MyPixelBuffer.Tail++
 		pwp.MYBUF.MyPixelBuffer.Tail %= PIXELWINDOW_BUFFER_SIZE
 		pwp.MYBUF.MyPixelBuffer.Size--
-		fmt.Println("PWT fine copy size= ", pwp.MYBUF.MyPixelBuffer.Size)
+		//fmt.Println("PWT fine copy size= ", pwp.MYBUF.MyPixelBuffer.Size)
 		if pwp.MYBUF.MyPixelBuffer.Size > 0 {
 			pwp.MYBUF.Bufcondvar.Signal()
 		}
 		pwp.PutFrontBufferOntoScreen()
 		pwp.MYBUF.Bufmutex.Unlock()
-		fmt.Println("PWT end pwt HHH  Size ", pwp.H, pwp.MYBUF.MyPixelBuffer.Size)
+		//fmt.Println("PWT end pwt HHH  Size ", pwp.H, pwp.MYBUF.MyPixelBuffer.Size)
 	}
 }
 
@@ -1077,49 +1077,53 @@ type PixelBuffer struct {
 }
 
 func (pw *PixelWindow) DisplayBuffer(b *byte) {
-	fmt.Println("DisplayBuffer start")
+	//fmt.Println("DisplayBuffer start")
 	pw.MYBUF.Bufmutex.Lock()
-	fmt.Println("DisplayBuffer dbmutlock afterlock", pw.Height, pw.Width, pw.MYBUF.MyPixelBuffer.Head)
+	//fmt.Println("DisplayBuffer dbmutlock afterlock", pw.Height, pw.Width, pw.MYBUF.MyPixelBuffer.Head)
 	for pw.MYBUF.MyPixelBuffer.Size == PIXELWINDOW_BUFFER_SIZE {
-		fmt.Println("DisplayBuffer dbmutlock size %d", pw.MYBUF.MyPixelBuffer.Size)
+		//fmt.Println("DisplayBuffer dbmutlock size %d", pw.MYBUF.MyPixelBuffer.Size)
 		pw.MYBUF.Bufcondvar.Wait()
 	}
-	fmt.Println("DisplayBuffer after for")
+	//fmt.Println("DisplayBuffer after for")
 	for i := 0; i < pw.Height*pw.Width*4; i++ {
 		pw.MYBUF.MyPixelBuffer.Pixels[pw.MYBUF.MyPixelBuffer.Head][i] =
 			*(*byte)(unsafe.Pointer(
 				uintptr(unsafe.Pointer(b)) + uintptr(i)))
 	}
-	fmt.Println("DisplayBuffer before unlock")
+	//fmt.Println("DisplayBuffer before unlock")
 
 	pw.MYBUF.Bufmutex.Unlock()
 	pw.MYBUF.MyPixelBuffer.Head++
 	pw.MYBUF.MyPixelBuffer.Head %= PIXELWINDOW_BUFFER_SIZE
 	pw.MYBUF.MyPixelBuffer.Size++
-	fmt.Println("DisplayBuffer after size++")
+	//fmt.Println("DisplayBuffer after size++")
 	if pw.MYBUF.MyPixelBuffer.Size > 0 {
-		fmt.Println("DisplayBuffer prima di signal")
+		//fmt.Println("DisplayBuffer prima di signal")
 		pw.MYBUF.Bufcondvar.Signal()
 	}
-	fmt.Println("DisplayBuffer dbmutlock sizebeforeunlock ", pw.MYBUF.MyPixelBuffer.Size, pw.H)
+	//fmt.Println("DisplayBuffer dbmutlock sizebeforeunlock ", pw.MYBUF.MyPixelBuffer.Size, pw.H)
 
 }
 
-func TheMessagePump() int {
+func TheMessagePump(exit bool) int {
 	var msgg MSG
 	for true {
-		fmt.Println("TheMessagePump begin")
+		//fmt.Println("TheMessagePump begin")
 		var retval = GetMessage(&msgg, 0, 0, 0)
-		fmt.Println("TheMessagePump Getmsg retval MSG", retval, msgg)
+		//fmt.Println("TheMessagePump Getmsg retval MSG", retval, msgg)
 		if retval == 0 {
-			fmt.Println("TheMessagePump Getmsgxit retvalZero Hwprm=", retval, msgg.WParam)
+			//fmt.Println("TheMessagePump Getmsgxit retvalZero Hwprm=", retval, msgg.WParam)
 			break
 		} else {
-			fmt.Println("TheMessagePump GetmsgxitT retval= Hwprm=", retval, msgg.WParam)
+			//fmt.Println("TheMessagePump GetmsgxitT retval= Hwprm=", retval, msgg.WParam)
+
 		}
 		TranslateMessage(&msgg)
 		DispatchMessage(&msgg)
-		fmt.Println("TheMessagePump Xit  retval= Hwprm=", retval, msgg.WParam)
+		if exit {
+			return int(msgg.WParam)
+		}
+		//fmt.Println("TheMessagePump Xit  retval= Hwprm=", retval, msgg.WParam)
 	}
 	return int(msgg.WParam)
 }
