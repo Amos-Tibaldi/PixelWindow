@@ -59,14 +59,17 @@ var themsgpmpret int = 0
 func main() {
 
 	for i := 0; i < 3; i++ {
-		PixelWindowGo.CreatePixelWindow(&thewindows[i])
+		//PixelWindowGo.CreatePixelWindow(&thewindows[i])
 	}
+	PixelWindowGo.CreatePixelWindow(&thewindows[0])
 
 	fillBuffersAndUpdatePixels()
 	fmt.Println("spike")
 	for true {
 		themsgpmpret = PixelWindowGo.TheMessagePump()
+		fmt.Println("in MAIN")
 		fillBuffersAndUpdatePixels()
+		fmt.Println("in main dopo fillbuffer")
 		if themsgpmpret == 20 {
 
 		}
@@ -76,15 +79,16 @@ func main() {
 		if themsgpmpret == 9 {
 
 		}
-		if themsgpmpret == 0 {
-
-		}
+		//if themsgpmpret == 0 {
+		fillBuffersAndUpdatePixels()
+		//PixelWindowGo.TheMessagePump()
+		//}
 		if themsgpmpret == 2 {
-			//fillBuffersAndUpdatePixels()
+
 		}
 
 		fmt.Println("altro valore in uscita ", themsgpmpret)
-		//PixelWindowGo.TheMessagePump()
+		//
 	}
 
 }
@@ -145,6 +149,6 @@ func fillBuffersAndUpdatePixels() {
 	}
 
 	thewindows[0].LDAPIXELWindowDisplayBuffer(&redbuffer[0])
-	thewindows[1].LDAPIXELWindowDisplayBuffer(&greenbuffer[0])
-	thewindows[2].LDAPIXELWindowDisplayBuffer(&bluebuffer[0])
+	//thewindows[1].LDAPIXELWindowDisplayBuffer(&greenbuffer[0])
+	//thewindows[2].LDAPIXELWindowDisplayBuffer(&bluebuffer[0])
 }
