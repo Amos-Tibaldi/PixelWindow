@@ -66,15 +66,11 @@ func main() {
 		}
 	}()
 
-	go func() {
-		for true {
-			PixelWindowGo.TheMessagePump(true)
-		}
-	}()
-
-	for true {
-
+	//go func() {
+	{
+		PixelWindowGo.TheMessagePump(false)
 	}
+	//}()
 }
 
 var level byte = 100
