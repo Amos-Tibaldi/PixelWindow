@@ -1,3 +1,3 @@
 module PixelWindowGo
 
-go 1.26rc2
+go 1.25.7
