@@ -36,12 +36,24 @@ package main
 
 import (
 	"PixelWindowGo/PixelWindowGo"
+	"image"
+	"image/color"
+	"log"
+	"os"
+
+	"unsafe"
+
+	"golang.org/x/image/font"
+	"golang.org/x/image/font/gofont/goitalic"
+	"golang.org/x/image/font/opentype"
+	"golang.org/x/image/math/fixed"
 )
 
 var bIOwnTheMessagePump bool = false
 var luckyhwnd PixelWindowGo.HWND = 0
 
 const imgsizebytes = 640 * 480 * 4
+const textwidthx = 640
 
 var redbuffer [imgsizebytes]byte
 var greenbuffer [imgsizebytes]byte
@@ -128,7 +140,73 @@ func fillBuffersAndUpdatePixels() {
 
 	}
 
+	drawtext(250, 36, 6, 28, &redbuffer[0], "jellyfish")
+	drawtext(250, 36, 6, 28, &greenbuffer[0], "bluewindow")
+	drawtext(250, 36, 6, 28, &bluebuffer[0], "yahoo")
+
 	thewindows[0].LDAPIXELWindowDisplayBuffer(&redbuffer[0])
 	thewindows[1].LDAPIXELWindowDisplayBuffer(&greenbuffer[0])
 	thewindows[2].LDAPIXELWindowDisplayBuffer(&bluebuffer[0])
+
+}
+
+func drawtext(width int, height int, startingDotX int, startingDotY int, bfr *byte, whattowrite string) error {
+
+	f, err := opentype.Parse(goitalic.TTF)
+	if err != nil {
+		log.Fatalf("Parse: %v", err)
+	}
+	face, err := opentype.NewFace(f, &opentype.FaceOptions{
+		Size:    32,
+		DPI:     72,
+		Hinting: font.HintingNone,
+	})
+	if err != nil {
+		log.Fatalf("NewFace: %v", err)
+	}
+
+	dst := image.NewGray(image.Rect(0, 0, width, height))
+	d := font.Drawer{
+		Dst:  dst,
+		Src:  image.White,
+		Face: face,
+		Dot:  fixed.P(startingDotX, startingDotY),
+	}
+	d.DrawString(whattowrite)
+	d.Src = image.NewUniform(color.Gray{0x7F})
+	d.DrawString(" fish")
+
+	const asciiArt = ".++8"
+	buf := make([]byte, 0, height*(width+1))
+
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			c := asciiArt[dst.GrayAt(x, y).Y>>6]
+			if c != '.' {
+				// No-op.
+				writetextpixel(x, y, 255, 0, 0, bfr)
+			} else if x == startingDotX-1 {
+				writetextpixel(x, y, 0, 255, 0, bfr)
+			} else if y == startingDotY-1 {
+				writetextpixel(x, y, 0, 0, 255, bfr)
+			}
+
+		}
+
+	}
+	os.Stdout.Write(buf)
+
+	return nil
+}
+
+func writetextpixel(x int, y int, r byte, g byte, b byte, thebuf *byte) {
+	var offseta int64 = int64(4 * (y*textwidthx + x))
+	*(*byte)(unsafe.Pointer(
+		uintptr(unsafe.Pointer(thebuf)) + uintptr(0+offseta))) = g
+	*(*byte)(unsafe.Pointer(
+		uintptr(unsafe.Pointer(thebuf)) + uintptr(1+offseta))) = r
+	*(*byte)(unsafe.Pointer(
+		uintptr(unsafe.Pointer(thebuf)) + uintptr(2+offseta))) = b
+	*(*byte)(unsafe.Pointer(
+		uintptr(unsafe.Pointer(thebuf)) + uintptr(3+offseta))) = 255
 }
